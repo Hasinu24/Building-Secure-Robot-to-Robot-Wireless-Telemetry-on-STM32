@@ -16,7 +16,6 @@
 ## Table of Contents
 
 - [Overview](#-overview)
-- [Why This Matters](#-why-this-matters-embedded-telemetry-in-a-robotics--ai-future)
 - [System Architecture](#-system-architecture)
 - [Key Features](#-key-features)
 - [Peripheral Pin Mapping](#-peripheral-pin-mapping)
@@ -46,42 +45,21 @@ The firmware is written entirely in embedded C for STM32CubeIDE / HAL, and is st
 
 ---
 
-## 🤖 Why This Matters: Embedded Telemetry in a Robotics & AI Future
-
-It's tempting to see a project like this as "just" two microcontrollers passing temperature readings back and forth. In practice, it's a compact rehearsal of problems that sit underneath almost every autonomous robot and edge-AI deployment being built today:
-
-- **Autonomous systems live and die by trustworthy sensor links.** A robot arm, drone swarm, or warehouse AGV is only as good as the telemetry feeding its control loop. The checksum validation and self-healing UART recovery here are small-scale versions of the fault-tolerant messaging that keeps a robot from acting on corrupted or dropped sensor data.
-- **Edge AI needs local memory it can trust.** Increasingly, inference and decision-making are pushed onto the device itself rather than the cloud. Hardware-protected, page-safe EEPROM logging is a miniature example of the kind of tamper-resistant local storage that on-device AI systems rely on to keep calibration data, model checkpoints, or event logs intact.
-- **Wireless mesh behaviour is the backbone of multi-robot coordination.** The sender/receiver architecture here — two nodes negotiating roles over a radio API — mirrors the building blocks of larger robotic mesh networks, where dozens of agents (drones, sensors, mobile robots) must exchange state reliably and securely.
-- **Security can't be an afterthought, even at the microcontroller level.** As robotics and IoT devices proliferate, they become attack surfaces. Lightweight obfuscation like the XOR masking used here is a first step in a much longer conversation about securing the sensor-to-decision pipeline — a conversation AI-driven physical systems can't avoid.
-- **Constrained hardware forces good engineering habits.** Building reliable systems on an 84 MHz Cortex-M4 with limited RAM and no OS is exactly the discipline needed for the next generation of low-power, always-on robotic and AI edge devices — where every byte and every clock cycle counts.
-
-In short: the humble Zigbee-and-EEPROM node is a small, well-contained proof that the fundamentals — reliable comms, protected storage, fault recovery, and basic security — are the same fundamentals that will underpin the autonomous and intelligent systems of the near future, just scaled up.
-
----
-
 ## 🏗 System Architecture
 
-\```
-+-----------------------------------------------------------------------------------+
-|                                 NUCLEO-F411RE                                      |
-|                                                                                     |
-|  +------------------+     USART1 (115200)     +---------------------------------+  |
-|  |                  | <---------------------> | XBee / Zigbee Module (API Mode)|  |
-|  |  STM32F411 MCU   |                          +---------------------------------+  |
-|  |  (Cortex-M4      |                                                              |
-|  |   @ 84 MHz)      |     I2C1 (100 kHz)      +---------------------------------+  |
-|  |                  | <---------------------> | Microchip 24LC64 EEPROM         |  |
-|  |                  |                          +---------------------------------+  |
-|  |                  |     GPIO (PB5)          +---------------------------------+  |
-|  |                  | -----------------------> | Write-Protect (WP) Line         |  |
-|  |                  |                          +---------------------------------+  |
-|  |                  |                                                              |
-|  |                  |     USART2 (115200)     +---------------------------------+  |
-|  |                  | -----------------------> | PC Terminal / Debug Console     |  |
-|  +------------------+                          +---------------------------------+  |
-+-----------------------------------------------------------------------------------+
-\```
+```mermaid
+graph LR
+    MCU["STM32F411 MCU<br/>Cortex-M4 @ 84 MHz"]
+    XBEE["XBee / Zigbee Module<br/>(API Mode)"]
+    EEPROM["Microchip 24LC64<br/>EEPROM"]
+    WP["Write-Protect (WP) Line"]
+    PC["PC Terminal / Debug Console"]
+
+    MCU <-->|USART1 · 115200 baud| XBEE
+    MCU <-->|I2C1 · 100 kHz| EEPROM
+    MCU -->|GPIO PB5| WP
+    MCU -->|USART2 · 115200 baud| PC
+```
 
 Two identically-flashed boards form a minimal mesh: **Board 1** initiates telemetry from a simulated Zone 1 sensor, while **Board 2** receives, decodes, and archives Zone 2 readings to EEPROM — with roles fully interchangeable via a single build-time macro.
 
@@ -123,18 +101,20 @@ Two identically-flashed boards form a minimal mesh: **Board 1** initiates teleme
 
 ## 📂 Project Structure
 
-\```
-├── Inc/
-│   ├── EEPROM.h        # 24LC64 driver function signatures and macros
-│   ├── Zigbee.h        # XBee API frame definitions and checksum headers
-│   └── main.h          # Core system includes & CubeMX-generated exports
-├── Src/
-│   ├── EEPROM.c        # Page-boundary-aware I2C EEPROM driver implementation
-│   ├── Zigbee.c        # API frame construction & checksum calculation logic
-│   ├── main_sender.c   # Application loop configured for Board 1 (sender)
-│   └── main_receive.c  # Application loop configured for Board 2 (receiver/logger)
-└── README.md           # You are here
-\```
+```text
+Inc/
+├── EEPROM.h        # 24LC64 driver function signatures and macros
+├── Zigbee.h        # XBee API frame definitions and checksum headers
+└── main.h          # Core system includes & CubeMX-generated exports
+
+Src/
+├── EEPROM.c        # Page-boundary-aware I2C EEPROM driver implementation
+├── Zigbee.c        # API frame construction & checksum calculation logic
+├── main_sender.c   # Application loop configured for Board 1 (sender)
+└── main_receive.c  # Application loop configured for Board 2 (receiver/logger)
+
+README.md           # You are here
+```
 
 ---
 
@@ -144,10 +124,10 @@ Two identically-flashed boards form a minimal mesh: **Board 1** initiates teleme
 
 Board behaviour is resolved entirely at compile time via a single macro in `main.c`:
 
-\```c
+```c
 #define THIS_BOARD 1   // Board 1: initiates Zone 1 telemetry, starting at 20 °C
 #define THIS_BOARD 2   // Board 2: receives Zone 2 telemetry, starting at 35 °C, + EEPROM logging
-\```
+```
 
 ### Build & Flash
 
