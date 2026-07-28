@@ -1,4 +1,4 @@
-# 🛰️ Secure STM32 Wireless Telemetry Node
+# 🛰️ Secure STM32 Wireless Telemetry Node 
 
 ### Encrypted Zigbee Telemetry · Hardware-Protected EEPROM Logging · Dual-Board Mesh Architecture
 
