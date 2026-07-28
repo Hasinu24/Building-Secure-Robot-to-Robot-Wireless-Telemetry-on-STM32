@@ -1,0 +1,127 @@
+/*
+ * EEPROM.c
+ * * Created on: 09/03/2026
+ * Author: Hasinu - University of Hertfordshire
+ * Developed for: Module 6ENT1180 EEPROM 24LC64 and Nucleo-F411RE
+ * Hardware Reference: https://docs.rs-online.com/a887/0900766b8137dd96.pdf
+ */
+
+//Includes
+#include "EEPROM.h"
+#include "math.h"
+#include "string.h"
+
+//Defines and Externs
+extern I2C_HandleTypeDef    hi2c1;      //Make sure this matches the I2C object created by STM32CubeMX
+#define EEPROM_I2C          &hi2c1      //Pointer reference for succinct code changes
+#define EEPROM_ADDR         0xA0        //Default EEPROM Address
+#define PAGE_SIZE           32          //32 Bytes for 24LC64
+#define PAGE_NUM            256         //8192 total bytes / 32 = 256 pages
+
+//Variables
+uint8_t bytes_temp[4];
+
+/* A Union object to easily convert a float to an array of bytes */
+union {
+    float FloatValue;
+    uint8_t BytesValue[4];
+} FloatUnion;
+
+/* Calculates the number of bytes to read/write without crossing page boundaries */
+uint16_t BytesToAction (uint16_t size, uint16_t offset)
+{
+    if ((size+offset)<PAGE_SIZE) return size;
+    else return PAGE_SIZE-offset;
+}
+
+/* Writes data to the EEPROM handling page boundaries */
+void EEPROM_Write (uint16_t page, uint16_t offset, uint8_t *data, uint16_t size)
+{
+    int AddressPosition = log(PAGE_SIZE)/log(2);
+    uint16_t StartPage = page;
+    uint16_t EndPage = page + ((size+offset)/PAGE_SIZE);
+    uint16_t NumOfPages = (EndPage-StartPage) + 1;
+    uint16_t pos = 0;
+
+    for (int i=0; i<NumOfPages; i++)
+    {
+        uint16_t MemAddress = StartPage<<AddressPosition | offset;
+        uint16_t NumBytes = BytesToAction(size, offset);
+
+        HAL_I2C_Mem_Write(EEPROM_I2C, EEPROM_ADDR, MemAddress, 2, &data[pos], NumBytes, 1000);
+
+        StartPage += 1;
+        offset = 0;
+        size -= NumBytes;
+        pos += NumBytes;
+        HAL_Delay (5);  // Required write cycle delay
+    }
+}
+
+/* Conversion method: Float to Bytes */
+void float2bytes(uint8_t * ftob_bytes_out, float float_variable)
+{
+    FloatUnion.FloatValue = float_variable;
+    for (uint8_t i = 0; i < 4; i++) {
+        ftob_bytes_out[i] = FloatUnion.BytesValue[i];
+    }
+}
+
+/* Conversion method: Bytes to Float */
+float bytes2float(uint8_t * btof_bytes_in)
+{
+    for (uint8_t i = 0; i < 4; i++) {
+        FloatUnion.BytesValue[i] = btof_bytes_in[i];
+    }
+    return FloatUnion.FloatValue;
+}
+
+/* Write a float or integer value to EEPROM */
+void EEPROM_Write_NUM (uint16_t page, uint16_t offset, float data)
+{
+    float2bytes(bytes_temp, data);
+    EEPROM_Write(page, offset, bytes_temp, 4);
+}
+
+/* Read a float or integer value from EEPROM */
+float EEPROM_Read_NUM (uint16_t page, uint16_t offset)
+{
+    uint8_t ReadBuffer[4];
+    EEPROM_Read(page, offset, ReadBuffer, 4);
+    return (bytes2float(ReadBuffer));
+}
+
+/* Read raw data from the EEPROM */
+void EEPROM_Read (uint16_t page, uint16_t offset, uint8_t *data, uint16_t size)
+{
+    int AddressPosition = log(PAGE_SIZE)/log(2);
+    uint16_t StartPage = page;
+    uint16_t EndPage = page + ((size+offset)/PAGE_SIZE);
+    uint16_t NumOfPages = (EndPage-StartPage) + 1;
+    uint16_t pos=0;
+
+    for (int i=0; i<NumOfPages; i++)
+    {
+        uint16_t MemAddress = StartPage<<AddressPosition | offset;
+        uint16_t NumBytes = BytesToAction(size, offset);
+
+        HAL_I2C_Mem_Read(EEPROM_I2C, EEPROM_ADDR, MemAddress, 2, &data[pos], NumBytes, 1000);
+
+        StartPage += 1;
+        offset = 0;
+        size -= NumBytes;
+        pos += NumBytes;
+    }
+}
+
+/* Erase a single page (sets all bytes to 0xFF) */
+void EEPROM_PageErase (uint16_t page)
+{
+    int AddressPosition = log(PAGE_SIZE)/log(2);
+    uint16_t MemAddress = page<<AddressPosition;
+    uint8_t data[PAGE_SIZE];
+    memset(data, 0xFF, PAGE_SIZE);
+
+    HAL_I2C_Mem_Write(EEPROM_I2C, EEPROM_ADDR, MemAddress, 2, data, PAGE_SIZE, 1000);
+    HAL_Delay (5);
+}
