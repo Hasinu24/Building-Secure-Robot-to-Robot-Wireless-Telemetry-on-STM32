@@ -1,0 +1,51 @@
+/*
+ * Zigbee.c
+ * Created on: 5 April 2026
+ */
+
+#include "Zigbee.h"
+
+extern UART_HandleTypeDef huart1;
+#define XBEE_USART &huart1
+
+uint8_t calculateChecksum(uint8_t* message, int length)
+{
+    int temp = 0;                          // Storage variable used in the calculation
+    for(int i=3;i<length-1;i++)            // For loop to process each byte from index 3 to the last byte of payload
+    {
+        temp += message[i];                // Adding the byte numbers together
+    }
+    return (0xFF - temp) & 0xFF;           // 0xFF - sum of all bytes, then return the last byte of the number only
+}
+
+void sendFrame(uint8_t* message, int length)
+{
+    uint8_t txFrame[256];                  // Adjust the array size as per your requirement
+    txFrame[0] = 0x7E;                     // Start delimiter
+    uint16_t frameLength = length + 14;    // Data length + frame type 0x10 header bytes length
+    txFrame[1] = (frameLength >> 8) & 0xFF; // MSB of frame length
+    txFrame[2] = frameLength & 0xFF;       // LSB of frame length
+    txFrame[3] = 0x10;                     // Frame type (Transmit Request)
+    txFrame[4] = 0x01;                     // Frame ID
+
+    // 64-bit Destination Address (all 0x00 for this example)
+    for(int i=5; i<=12; i++) txFrame[i] = 0x00;
+
+    // 16-bit Destination Address 0xFFFE
+    txFrame[13] = 0xFF;
+    txFrame[14] = 0xFE;
+
+    txFrame[15] = 0x00;                    // Broadcast Radius
+    txFrame[16] = 0x00;                    // Options
+
+    memcpy(&txFrame[17], message, length); // Copy message to frame
+
+    int finallen = 17 + length + 1;        // Calculate final frame length
+    uint8_t chksum = calculateChecksum(txFrame, finallen); // Calculate checksum
+    txFrame[finallen-1] = chksum;          // Add checksum to the last byte
+
+    HAL_UART_Transmit(XBEE_USART, txFrame, finallen, 100); // Transmit the finished frame
+}
+
+
+
